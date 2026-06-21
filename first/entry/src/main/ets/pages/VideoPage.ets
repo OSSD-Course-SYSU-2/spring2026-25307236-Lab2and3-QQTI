@@ -1,5 +1,6 @@
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import { ContinuationState } from '../common/ContinuationState';
 import {
   Breakpoint,
   BreakpointConstants,
@@ -9,6 +10,7 @@ import {
 
 interface RouteParams {
   inputValid: boolean;
+  qqNumber?: string;
 }
 
 @Entry
@@ -21,11 +23,23 @@ struct VideoPage {
   private observer: BreakpointObserver = new BreakpointObserver();
 
   aboutToAppear(): void {
+    // 尝试从路由参数获取
     const params = router.getParams() as RouteParams;
     if (params && params.inputValid) {
       this.inputValid = params.inputValid;
     }
-    // 监听断点变化（跨页面共用 AppStorage）
+
+    // 检查是否由迁移恢复启动
+    if (ContinuationState.isRestored) {
+      const data = ContinuationState.get();
+      console.info('[VideoPage] 迁移恢复, currentPage: ' + data.currentPage);
+      if (data.currentPage === 'pages/VideoPage') {
+        this.inputValid = true;
+      }
+      ContinuationState.reset();
+    }
+
+    // 监听断点变化
     this.observer.init(this.getUIContext(), (bp: Breakpoint) => {
       AppStorage.setOrCreate('currentBreakpoint', bp);
     });
@@ -38,6 +52,15 @@ struct VideoPage {
   /** 获取视频页面专用样式 */
   private style(): ResponsiveStyle {
     return BreakpointConstants.getVideoPageStyle(this.currentBp);
+  }
+
+  /** 保存当前状态到迁移存储 */
+  onPageShow(): void {
+    ContinuationState.save({
+      currentPage: 'pages/VideoPage',
+      qqNumber: '',
+      timestamp: Date.now()
+    });
   }
 
   build() {
@@ -57,6 +80,23 @@ struct VideoPage {
       Column() {
         // 顶部导航
         this.topNavBar()
+
+        // 流转提示条
+        Row({ space: 6 }) {
+          Text('↔')
+            .fontSize(16)
+            .fontColor('#007DFF')
+          Text('支持跨设备流转：在另一设备Dock栏点击图标可继续观看')
+            .fontSize(this.style().captionFontSize)
+            .fontColor('#007DFF')
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+        .padding({ top: 8, bottom: 8 })
+        .backgroundColor('#E8F4FD')
+        .borderRadius(8)
+        .margin({ bottom: this.style().spacing * 0.5 })
 
         // 内容区：宽屏横排 / 窄屏竖排
         if (this.style().isWideLayout) {
